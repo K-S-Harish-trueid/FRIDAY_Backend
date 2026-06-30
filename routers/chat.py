@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from models.chat import ChatRequest, ChatResponse, HealthResponse
 from services.command_service import dispatch
-from services import openai_service
+from services import groq_service
 
 router = APIRouter()
 
@@ -26,7 +26,7 @@ def chat(request: ChatRequest):
 
     # Step 2: fall through to OpenAI
     try:
-        reply = openai_service.complete(request.messages)
+        reply = groq_service.complete(request.messages)
         return ChatResponse(response=reply)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"OpenAI error: {e}")
