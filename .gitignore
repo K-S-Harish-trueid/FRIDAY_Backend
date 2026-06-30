@@ -15,6 +15,7 @@ venv/
 .venv/
 env/
 .env/
+.env.example
 
 # Environment variables
 .env
@@ -39,3 +40,6 @@ logs/
 .pytest_cache/
 .coverage
 htmlcov/
+
+
+help.txt
