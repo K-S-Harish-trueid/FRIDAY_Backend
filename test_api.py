@@ -6,7 +6,7 @@ Requires the server to be running: uvicorn main:app --reload
 import sys
 import httpx
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "https://friday-backend-t7xa.onrender.com"
 
 # ── ANSI colours ──────────────────────────────────────────────────────────────
 GREEN  = "\033[92m"

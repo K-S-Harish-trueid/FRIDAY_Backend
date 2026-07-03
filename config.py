@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     # anthropic_api_key: str = ""
 
     # ── Database ──────────────────────────────────────────────────────────────
-    database_url: str = ""
+    database_url: str = "postgresql://postgres:ksharishsupa@db.kyozmgxqeqmrvcdlprli.supabase.co:5432/postgres"
 
     # ── Future external API base URLs ─────────────────────────────────────────
     # pokeapi_base_url: str = "https://pokeapi.co/api/v2"
