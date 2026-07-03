@@ -28,20 +28,24 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             user_message = msg.content
             break
 
+    # Validate conversation_id first — before local commands so an invalid ID
+    # always returns 404 regardless of message content.
+    conv = None
+    if request.conversation_id is not None:
+        conv = await db.get(Conversation, request.conversation_id)
+        if conv is None:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+
     # Local command layer — no DB, no LLM
     result = dispatch(user_message)
     if result is not None:
         return ChatResponse(response=result.response)
 
     # Get or create conversation
-    if request.conversation_id is None:
+    if conv is None:
         conv = Conversation(title=user_message[:40].strip() or "New Conversation")
         db.add(conv)
         await db.flush()
-    else:
-        conv = await db.get(Conversation, request.conversation_id)
-        if conv is None:
-            raise HTTPException(status_code=404, detail="Conversation not found")
 
     # Persist user message
     db.add(Message(conversation_id=conv.id, role="user", content=user_message))

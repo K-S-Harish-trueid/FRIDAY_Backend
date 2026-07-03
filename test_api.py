@@ -7,6 +7,7 @@ import sys
 import httpx
 
 BASE_URL = "https://friday-backend-t7xa.onrender.com"
+#BASE_URL = "http://localhost:8000"
 
 # ── ANSI colours ──────────────────────────────────────────────────────────────
 GREEN  = "\033[92m"
@@ -104,9 +105,9 @@ def test_chat_continue(client: httpx.Client):
         return
     payload = {
         "messages": [
-            {"role": "user",    "content": "Who built you?"},
+            {"role": "user",     "content": "Who built you?"},
             {"role": "assistant","content": "I am F.R.I.D.A.Y."},
-            {"role": "user",    "content": "What can you do?"},
+            {"role": "user",     "content": "Tell me a fun fact."},
         ],
         "conversation_id": conversation_id,
     }
