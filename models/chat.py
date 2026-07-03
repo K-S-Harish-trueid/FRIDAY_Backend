@@ -1,3 +1,4 @@
+from uuid import UUID
 from pydantic import BaseModel
 from typing import Optional
 
@@ -10,11 +11,12 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     messages: list[ChatMessage]
     system: Optional[str] = None
+    conversation_id: Optional[UUID] = None
 
 
 class ChatResponse(BaseModel):
-    # Matches what OwnService in the Flutter app expects: data['response']
     response: str
+    conversation_id: Optional[str] = None
 
 
 class HealthResponse(BaseModel):

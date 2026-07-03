@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     # gemini_api_key: str = ""
     # anthropic_api_key: str = ""
 
+    # ── Database ──────────────────────────────────────────────────────────────
+    database_url: str = ""
+
     # ── Future external API base URLs ─────────────────────────────────────────
     # pokeapi_base_url: str = "https://pokeapi.co/api/v2"
     # openweather_base_url: str = "https://api.openweathermap.org/data/2.5"

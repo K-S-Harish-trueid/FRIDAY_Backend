@@ -1,11 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers.chat import router
+from routers.conversations import router as conversations_router
 
 app = FastAPI(
     title="F.R.I.D.A.Y Backend",
-    description="Local command layer + future LLM proxy for the F.R.I.D.A.Y Flutter app.",
-    version="0.1.0",
+    description="Local command layer + LLM proxy with persistent conversation history.",
+    version="0.2.0",
 )
 
 app.add_middleware(
@@ -16,7 +17,4 @@ app.add_middleware(
 )
 
 app.include_router(router)
-
-# TODO: register additional routers here as services are added, e.g.:
-#   from routers.pokemon import router as pokemon_router
-#   app.include_router(pokemon_router, prefix="/api")
+app.include_router(conversations_router)
