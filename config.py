@@ -8,17 +8,9 @@ class Settings(BaseSettings):
 
     # ── LLM keys ──────────────────────────────────────────────────────────────
     groq_api_key: str = ""
-    # groq_api_key: str = ""
-    # gemini_api_key: str = ""
-    # anthropic_api_key: str = ""
 
     # ── Database ──────────────────────────────────────────────────────────────
-    database_url: str = "postgresql://postgres:ksharishsupa@db.kyozmgxqeqmrvcdlprli.supabase.co:5432/postgres"
-
-    # ── Future external API base URLs ─────────────────────────────────────────
-    # pokeapi_base_url: str = "https://pokeapi.co/api/v2"
-    # openweather_base_url: str = "https://api.openweathermap.org/data/2.5"
-    # openweather_api_key: str = ""
+    database_url: str = ""  # must come from env — no secrets hardcoded here
 
     class Config:
         env_file = ".env"
