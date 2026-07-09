@@ -54,7 +54,10 @@ TOOLS = [
             "description": (
                 "Ask the user's device for its current GPS location. Use this when "
                 "the user refers to 'my location', 'where am I', or wants an answer "
-                "relative to where they are without naming a place."
+                "relative to where they are without naming a place — including "
+                "weather requests with no city given (e.g. 'what's the weather "
+                "like?'). Call this instead of asking the user to type their "
+                "location in chat; the app handles that prompt itself."
             ),
             "parameters": {"type": "object", "properties": {}},
         },
