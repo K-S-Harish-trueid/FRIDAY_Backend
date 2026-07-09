@@ -14,9 +14,15 @@ class ChatRequest(BaseModel):
     conversation_id: Optional[UUID] = None
 
 
+class Action(BaseModel):
+    type: str
+    payload: dict = {}
+
+
 class ChatResponse(BaseModel):
     response: str
     conversation_id: Optional[str] = None
+    action: Optional[Action] = None
 
 
 class HealthResponse(BaseModel):

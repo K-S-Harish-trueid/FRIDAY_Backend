@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from models.chat import ChatRequest, ChatResponse, HealthResponse
+from models.chat import Action, ChatRequest, ChatResponse, HealthResponse
 from models.db_models import Conversation, Message
 from services import groq_service, gemini_service
 
@@ -16,7 +16,7 @@ def _utcnow() -> datetime:
 
 @router.get("/health", response_model=HealthResponse)
 async def health():
-    return HealthResponse(status="ok", version="0.2.0")
+    return HealthResponse(status="ok", version="0.3.0")
 
 
 @router.post("/api/chat", response_model=ChatResponse)
@@ -44,9 +44,12 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     # Persist user message
     db.add(Message(conversation_id=conv.id, role="user", content=user_message))
 
-    # Groq primary, Gemini fallback
+    # Groq primary (with tool calling), Gemini fallback (plain text, no tools)
+    action = None
     try:
-        reply = await groq_service.complete(request.messages)
+        reply, action_dict = await groq_service.complete_with_tools(request.messages)
+        if action_dict is not None:
+            action = Action(**action_dict)
     except Exception as groq_error:
         try:
             reply = await gemini_service.complete(request.messages)
@@ -63,4 +66,4 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
 
     await db.commit()
 
-    return ChatResponse(response=reply, conversation_id=str(conv.id))
+    return ChatResponse(response=reply, conversation_id=str(conv.id), action=action)

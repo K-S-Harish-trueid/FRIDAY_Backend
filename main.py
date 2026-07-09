@@ -5,8 +5,8 @@ from routers.conversations import router as conversations_router
 
 app = FastAPI(
     title="F.R.I.D.A.Y Backend",
-    description="Local command layer + LLM proxy with persistent conversation history.",
-    version="0.2.0",
+    description="LLM proxy + tool-calling agent (Groq/Gemini) with persistent conversation history.",
+    version="0.3.0",
 )
 
 app.add_middleware(
