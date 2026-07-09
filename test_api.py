@@ -4,6 +4,7 @@ Requires the server to be running: uvicorn main:app --reload
 """
 
 import sys
+import time
 import httpx
 
 BASE_URL = "https://friday-backend-t7xa.onrender.com"
@@ -54,6 +55,29 @@ def show(res: httpx.Response):
         print(f"    {line}")
 
 
+# ── Cold-start warm-up ────────────────────────────────────────────────────────
+
+def wait_for_server(client: httpx.Client, timeout: int = 60, interval: int = 3):
+    """Poll /health until the server responds or timeout is reached."""
+    print(f"{YELLOW}{BOLD}Waiting for server to wake up (cold start)...{RESET}")
+    deadline = time.time() + timeout
+    attempt = 0
+    while time.time() < deadline:
+        attempt += 1
+        try:
+            res = client.get("/health", timeout=5)
+            if res.status_code == 200:
+                print(f"  {GREEN}✓ Server is alive{RESET} (attempt {attempt})\n")
+                return
+        except (httpx.ConnectError, httpx.TimeoutException):
+            pass
+        remaining = int(deadline - time.time())
+        print(f"  {YELLOW}· attempt {attempt} — retrying in {interval}s  ({remaining}s left){RESET}")
+        time.sleep(interval)
+    print(f"  {RED}✗ Server did not respond within {timeout}s — aborting.{RESET}\n")
+    sys.exit(1)
+
+
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
 def test_health(client: httpx.Client):
@@ -67,20 +91,15 @@ def test_health(client: httpx.Client):
 
 
 def test_local_command(client: httpx.Client):
-    header("2. Local Command (no DB/Groq)  POST /api/chat")
-    payload = {"messages": [{"role": "user", "content": "what time is it"}]}
-    res = client.post("/api/chat", json=payload)
+    header("2. Simple prompt round-trips through the LLM  POST /api/chat")
+    payload = {"messages": [{"role": "user", "content": "Say hello in one short sentence."}]}
+    res = client.post("/api/chat", json=payload, timeout=30)
     show(res)
     data = res.json()
-    if res.status_code == 200 and data.get("response"):
-        no_conv = data.get("conversation_id") is None
-        ok("Local command handled", data["response"][:60])
-        if no_conv:
-            ok("No conversation created for local command")
-        else:
-            fail("Unexpected conversation_id for local command")
+    if res.status_code == 200 and data.get("response") and data.get("conversation_id"):
+        ok("Got LLM reply with a persisted conversation", data["response"][:60])
     else:
-        fail("Local command failed")
+        fail("Chat call failed")
 
 
 def test_chat_new_conversation(client: httpx.Client):
@@ -194,6 +213,7 @@ def main():
 
     try:
         with httpx.Client(base_url=BASE_URL) as client:
+            wait_for_server(client)
             test_health(client)
             test_local_command(client)
             test_chat_new_conversation(client)

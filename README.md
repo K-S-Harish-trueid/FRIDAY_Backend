@@ -1,7 +1,17 @@
 # F.R.I.D.A.Y Backend
 
-FastAPI backend for the F.R.I.D.A.Y Flutter app.  
-Current milestone: local command layer only — no external LLM calls yet.
+FastAPI backend for the F.R.I.D.A.Y Flutter app — the **only** place LLM calls
+happen. The Flutter client never talks to Groq/Gemini directly; it only ever
+calls this API.
+
+**Architecture:**
+- **Groq** (`llama-3.3-70b-versatile`) is the primary LLM.
+- **Gemini** (`gemini-2.0-flash`) is the automatic fallback if the Groq call fails.
+- **Supabase Postgres** (SQLAlchemy async + asyncpg) persists conversations and messages.
+- **Local commands** (time, date, greetings, jokes, etc.) are handled entirely
+  client-side in the Flutter app — the backend has no command layer of its own.
+- **Tool calling** (weather, web search, maps, location) — coming soon via Groq's
+  native function-calling API.
 
 ---
 
@@ -54,65 +64,58 @@ Response:
 ---
 
 ### `POST /api/chat`
-Send a message and get a response. Mirrors the shape `OwnService` in the Flutter app already sends and expects.
+Send a message and get an LLM-generated response, persisted to the conversation.
 
 **Request body:**
 ```json
 {
   "messages": [
-    {"role": "user", "content": "what time is it"}
+    {"role": "user", "content": "Who built you?"}
   ],
-  "system": "optional system prompt string"
+  "conversation_id": "optional existing conversation UUID"
 }
 ```
 
 **Response:**
 ```json
 {
-  "response": "It's 14:32, boss."
+  "response": "Built by Harish, boss. Systems nominal.",
+  "conversation_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
 }
 ```
 
-**Example — time command:**
+- Omit `conversation_id` to start a new conversation (one is created and returned).
+- Pass a known `conversation_id` back in to continue that conversation; an unknown id returns `404`.
+- If the Groq call fails, the backend automatically retries with Gemini before
+  returning a `502`.
+
+**Example:**
 ```bash
 curl -X POST http://localhost:8000/api/chat \
   -H "Content-Type: application/json" \
-  -d '{"messages": [{"role": "user", "content": "what time is it"}]}'
+  -d '{"messages": [{"role": "user", "content": "Who built you?"}]}'
 ```
 
-**Example — date command:**
-```bash
-curl -X POST http://localhost:8000/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{"messages": [{"role": "user", "content": "what is today date"}]}'
-```
-
-**Example — unmatched (placeholder):**
-```bash
-curl -X POST http://localhost:8000/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{"messages": [{"role": "user", "content": "tell me about black holes"}]}'
-```
-
-Response:
-```json
-{
-  "response": "No handler matched — external API integration not yet connected."
-}
-```
-
-**Example — with conversation history:**
+**Example — continuing a conversation:**
 ```bash
 curl -X POST http://localhost:8000/api/chat \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [
-      {"role": "user", "content": "hello"},
-      {"role": "assistant", "content": "Systems online. Ready when you are, boss."},
-      {"role": "user", "content": "what time is it"}
-    ]
+      {"role": "user", "content": "Who built you?"},
+      {"role": "assistant", "content": "Built by Harish, boss."},
+      {"role": "user", "content": "Tell me a fun fact."}
+    ],
+    "conversation_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
   }'
 ```
+
+### Conversation history
+
+- `POST /conversations/` — create an empty conversation
+- `GET /conversations/` — list conversations, newest first
+- `GET /conversations/{id}/messages` — fetch all messages in a conversation
+- `DELETE /conversations/{id}` — delete a conversation and its messages
 
 ---
 
@@ -122,34 +125,19 @@ curl -X POST http://localhost:8000/api/chat \
 backend/
 ├── main.py                  # FastAPI app, middleware, router registration
 ├── config.py                # Settings via pydantic-settings (.env support)
-├── .env.example             # Template for future API keys
+├── database.py               # Async SQLAlchemy engine/session setup
+├── .env.example              # Template for API keys / DB URL
 ├── requirements.txt
 ├── README.md
 ├── routers/
-│   └── chat.py              # POST /api/chat  +  GET /health
+│   ├── chat.py               # POST /api/chat  +  GET /health
+│   └── conversations.py      # Conversation history endpoints
 ├── services/
-│   └── command_service.py   # Pluggable command handler registry
+│   ├── groq_service.py       # Primary LLM (Groq, llama-3.3-70b-versatile)
+│   └── gemini_service.py     # Fallback LLM (Gemini, gemini-2.0-flash)
 └── models/
-    └── chat.py              # Pydantic request/response schemas
-```
-
----
-
-## Adding a New Command
-
-Open [services/command_service.py](services/command_service.py) and add a handler function, then register it:
-
-```python
-def handle_weather(lower: str) -> Optional[CommandResult]:
-    if _matches(lower, ["what's the weather", "weather today"]):
-        # call weather_service here once wired up
-        return CommandResult(response="Weather service not yet connected.", command_type="weather")
-    return None
-
-HANDLERS = [
-    ...,
-    handle_weather,   # <-- add here
-]
+    ├── chat.py                # Pydantic request/response schemas
+    └── db_models.py           # SQLAlchemy Conversation / Message tables
 ```
 
 ---
@@ -158,14 +146,13 @@ HANDLERS = [
 
 1. Create `services/my_service.py` with an async function, e.g. `async def query(prompt: str) -> str`.
 2. Add its env vars to `.env.example` and `config.py`.
-3. Import and call it from `routers/chat.py` in the TODO block.
+3. Import and call it from `routers/chat.py`.
 
 ---
 
-## Wiring into the Flutter App
+## Roadmap
 
-The Flutter app's `OwnService` already calls `http://10.0.2.2:8000/chat` (Android emulator
-localhost). This backend serves at `/api/chat`. When you're ready to wire it up, either:
-
-- Update `ownApiUrl` in `lib/config.dart` to `http://10.0.2.2:8000/api/chat`, **or**
-- Add a `/chat` alias route in `routers/chat.py` pointing to the same handler.
+Tool calling (Groq native function calling) is next: `get_weather` (Open-Meteo),
+`web_search` (DuckDuckGo), `get_current_location` and `open_maps` (device
+actions handed back to the Flutter client). See `services/tool_service.py`
+once added.

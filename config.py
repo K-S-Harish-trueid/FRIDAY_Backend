@@ -8,6 +8,7 @@ class Settings(BaseSettings):
 
     # ── LLM keys ──────────────────────────────────────────────────────────────
     groq_api_key: str = ""
+    gemini_api_key: str = ""
 
     # ── Database ──────────────────────────────────────────────────────────────
     database_url: str = ""  # must come from env — no secrets hardcoded here

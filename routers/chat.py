@@ -5,8 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from models.chat import ChatRequest, ChatResponse, HealthResponse
 from models.db_models import Conversation, Message
-from services.command_service import dispatch
-from services import groq_service
+from services import groq_service, gemini_service
 
 router = APIRouter()
 
@@ -28,18 +27,13 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             user_message = msg.content
             break
 
-    # Validate conversation_id first — before local commands so an invalid ID
+    # Validate conversation_id first — before the LLM call so an invalid ID
     # always returns 404 regardless of message content.
     conv = None
     if request.conversation_id is not None:
         conv = await db.get(Conversation, request.conversation_id)
         if conv is None:
             raise HTTPException(status_code=404, detail="Conversation not found")
-
-    # Local command layer — no DB, no LLM
-    result = dispatch(user_message)
-    if result is not None:
-        return ChatResponse(response=result.response)
 
     # Get or create conversation
     if conv is None:
@@ -50,12 +44,18 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     # Persist user message
     db.add(Message(conversation_id=conv.id, role="user", content=user_message))
 
-    # Call Groq
+    # Groq primary, Gemini fallback
     try:
         reply = await groq_service.complete(request.messages)
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(status_code=502, detail=f"Groq error: {e}")
+    except Exception as groq_error:
+        try:
+            reply = await gemini_service.complete(request.messages)
+        except Exception as gemini_error:
+            await db.rollback()
+            raise HTTPException(
+                status_code=502,
+                detail=f"Groq error: {groq_error}; Gemini error: {gemini_error}",
+            )
 
     # Persist assistant reply and bump updated_at
     db.add(Message(conversation_id=conv.id, role="assistant", content=reply))
