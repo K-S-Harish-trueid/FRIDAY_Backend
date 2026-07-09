@@ -57,7 +57,10 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             await db.rollback()
             raise HTTPException(
                 status_code=502,
-                detail=f"Groq error: {groq_error}; Gemini error: {gemini_error}",
+                detail=(
+                    f"Groq error: {type(groq_error).__name__}: {groq_error}; "
+                    f"Gemini error: {type(gemini_error).__name__}: {gemini_error}"
+                ),
             )
 
     # Persist assistant reply and bump updated_at

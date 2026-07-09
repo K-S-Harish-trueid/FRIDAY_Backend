@@ -1,5 +1,5 @@
 import json
-from groq import AsyncGroq, BadRequestError
+from groq import AsyncGroq
 from config import settings
 from models.chat import ChatMessage
 from services import tool_service
@@ -13,7 +13,7 @@ _SYSTEM_PROMPT = (
 )
 
 _MODEL = "llama-3.3-70b-versatile"
-_client = AsyncGroq(api_key=settings.groq_api_key)
+_client = AsyncGroq(api_key=settings.groq_api_key, timeout=30.0)
 
 
 async def complete(messages: list[ChatMessage]) -> str:
@@ -43,14 +43,14 @@ async def complete_with_tools(messages: list[ChatMessage]) -> tuple[str, dict | 
             tools=tool_service.TOOLS,
             tool_choice="auto",
         )
-    except BadRequestError:
-        # llama-3.3's tool-calling grammar occasionally emits a malformed
-        # function call that Groq itself rejects with a 400. Rather than
-        # failing the whole request (and falling through to Gemini, which
-        # can't use tools either), retry once as a plain completion.
+        message = result.choices[0].message
+    except Exception:
+        # Anything from a malformed tool-call grammar (BadRequestError) to a
+        # transient network/timeout blip on this specific call — degrade to
+        # a plain completion rather than failing the whole turn. Falling
+        # all the way through to the Gemini fallback isn't useful here
+        # anyway since Gemini has no tool support.
         return await complete(messages), None
-
-    message = result.choices[0].message
 
     if not message.tool_calls:
         return message.content, None
@@ -73,28 +73,34 @@ async def complete_with_tools(messages: list[ChatMessage]) -> tuple[str, dict | 
         }
     )
 
-    action = None
-    for tc in message.tool_calls:
-        args = json.loads(tc.function.arguments or "{}")
+    try:
+        action = None
+        for tc in message.tool_calls:
+            args = json.loads(tc.function.arguments or "{}")
 
-        if tc.function.name in tool_service.DEVICE_ACTION_TOOLS:
-            if action is None:
-                action = tool_service.build_action(tc.function.name, args)
-            tool_result = {"status": "dispatched_to_device"}
-        else:
-            tool_result = await tool_service.execute_tool(tc.function.name, args)
+            if tc.function.name in tool_service.DEVICE_ACTION_TOOLS:
+                if action is None:
+                    action = tool_service.build_action(tc.function.name, args)
+                tool_result = {"status": "dispatched_to_device"}
+            else:
+                tool_result = await tool_service.execute_tool(tc.function.name, args)
 
-        chat_messages.append(
-            {
-                "role": "tool",
-                "tool_call_id": tc.id,
-                "name": tc.function.name,
-                "content": json.dumps(tool_result),
-            }
+            chat_messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "name": tc.function.name,
+                    "content": json.dumps(tool_result),
+                }
+            )
+
+        final = await _client.chat.completions.create(
+            model=_MODEL,
+            messages=chat_messages,
         )
-
-    final = await _client.chat.completions.create(
-        model=_MODEL,
-        messages=chat_messages,
-    )
-    return final.choices[0].message.content, action
+        return final.choices[0].message.content, action
+    except Exception:
+        # Tool execution (weather/search API down) or the follow-up
+        # completion failed — degrade to a plain reply instead of losing
+        # the whole turn.
+        return await complete(messages), None
