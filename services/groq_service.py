@@ -1,5 +1,5 @@
 import json
-from groq import AsyncGroq
+from groq import AsyncGroq, BadRequestError
 from config import settings
 from models.chat import ChatMessage
 from services import tool_service
@@ -36,12 +36,20 @@ async def complete_with_tools(messages: list[ChatMessage]) -> tuple[str, dict | 
         {"role": m.role, "content": m.content} for m in messages
     ]
 
-    result = await _client.chat.completions.create(
-        model=_MODEL,
-        messages=chat_messages,
-        tools=tool_service.TOOLS,
-        tool_choice="auto",
-    )
+    try:
+        result = await _client.chat.completions.create(
+            model=_MODEL,
+            messages=chat_messages,
+            tools=tool_service.TOOLS,
+            tool_choice="auto",
+        )
+    except BadRequestError:
+        # llama-3.3's tool-calling grammar occasionally emits a malformed
+        # function call that Groq itself rejects with a 400. Rather than
+        # failing the whole request (and falling through to Gemini, which
+        # can't use tools either), retry once as a plain completion.
+        return await complete(messages), None
+
     message = result.choices[0].message
 
     if not message.tool_calls:
